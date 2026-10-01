@@ -123,7 +123,7 @@ if scan_btn and url_input:
             with p_col1:
                 final_url = results['url_features']['final_url']
                 is_redirected = results['url_features']['original_url'] != final_url
-                redir_text = f"🔀 Redirected to: {final_url[:30]}..." if is_redirected else "✅ Direct Link"
+                redir_text = f"🔀 Redirected: {final_url[:25]}..." if is_redirected else "✅ Direct Link"
                 
                 st.markdown(f"""
                 <div class="metric-box" style="text-align: left; border-left-color: {'#FF0000' if is_redirected else '#00e5ff'};">
@@ -133,11 +133,12 @@ if scan_btn and url_input:
                 """, unsafe_allow_html=True)
                 
             with p_col2:
-                issuer = results['ssl_details'].get('issuer', 'Unknown')
+                is_punycode = results['url_features'].get('is_punycode_homograph', False)
+                homograph_text = "⚠️ HOMOGRAPH ATTACK DETECTED" if is_punycode else "✅ Safe Font (No Punycode)"
                 st.markdown(f"""
-                <div class="metric-box" style="text-align: left;">
-                    <div class="metric-title">SSL Certificate Issuer</div>
-                    <div style="color: #fff; font-size: 14px; margin-top: 5px;">{issuer}</div>
+                <div class="metric-box" style="text-align: left; border-left-color: {'#FF0000' if is_punycode else '#00e5ff'};">
+                    <div class="metric-title">Visual Spoofing Check</div>
+                    <div style="color: #fff; font-size: 14px; margin-top: 5px;">{homograph_text}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 

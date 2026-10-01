@@ -9,6 +9,7 @@ import os
 import socket
 import ssl
 import re
+import concurrent.futures
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -44,7 +45,6 @@ def get_ssl_details(hostname):
 def scrape_page_context(url):
     """Premium Feature: Scrapes DOM to see what the page is actually claiming to be."""
     try:
-        # Premium Security Fix: Bypassing anti-bot protections (Cloudflare/WAF) used by phishing sites
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -67,6 +67,12 @@ def extract_url_features(original_url):
     
     domain = ext.domain + "." + ext.suffix
     
+    try:
+        # Premium Security Feature: Detect Homograph Attacks (Punycode) e.g., bкash.com -> xn--
+        is_punycode = domain.encode('idna').decode('utf-8').startswith("xn--")
+    except:
+        is_punycode = False
+    
     features = {
         "original_url": original_url,
         "final_url": final_url,
@@ -76,6 +82,7 @@ def extract_url_features(original_url):
         "url_length": len(final_url),
         "has_ip_in_domain": any(char.isdigit() for char in domain.replace(".", "")),
         "hyphens_in_domain": domain.count("-"),
+        "is_punycode_homograph": is_punycode,
         "suspicious_words": check_suspicious_words(final_url)
     }
     return features
@@ -87,9 +94,16 @@ def check_suspicious_words(url):
     return found
 
 def get_whois_data(domain):
-    """Retrieves domain registration age and details."""
+    """Retrieves domain registration age and details with strict timeout."""
+    def fetch_whois():
+        return whois.whois(domain)
+        
     try:
-        domain_info = whois.whois(domain)
+        # Premium Bug Fix: Prevent Streamlit Freezing by wrapping WHOIS in a ThreadPool with a strict 4-second timeout
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(fetch_whois)
+            domain_info = future.result(timeout=4)
+            
         creation_date = domain_info.creation_date
         
         if type(creation_date) == list:
@@ -99,6 +113,8 @@ def get_whois_data(domain):
             age_days = (datetime.datetime.now() - creation_date).days
             return {"domain_age_days": age_days, "registrar": domain_info.registrar, "error": None}
         return {"domain_age_days": "Unknown", "registrar": "Hidden", "error": None}
+    except concurrent.futures.TimeoutError:
+        return {"domain_age_days": "Unknown", "registrar": "Timeout (Server Hidden)", "error": "WHOIS Timeout"}
     except Exception as e:
         return {"domain_age_days": "Unknown", "registrar": "Unknown", "error": str(e)}
 
