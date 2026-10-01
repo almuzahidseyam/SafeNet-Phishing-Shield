@@ -88,7 +88,9 @@ if scan_btn and url_input:
             st.subheader("🧠 AI Security Analyst Report")
             st.info(reasoning)
             
-            st.markdown("### 🔎 Deterministic Extracted Data")
+            st.markdown("### 🔎 Deep Inspection Metrics")
+            
+            # Row 1: Deterministic URL/WHOIS Metrics
             d_col1, d_col2, d_col3 = st.columns(3)
             with d_col1:
                 st.markdown(f"""
@@ -98,18 +100,51 @@ if scan_btn and url_input:
                 </div>
                 """, unsafe_allow_html=True)
             with d_col2:
-                ssl_text = "🔒 Secure" if results['url_features']['is_https'] else "🔓 Unsafe"
+                ssl_text = "🔒 Secure" if results['ssl_details']['valid'] else "🔓 Unsafe"
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div class="metric-title">SSL / HTTPS</div>
+                    <div class="metric-title">SSL Protocol</div>
                     <div class="metric-value">{ssl_text}</div>
                 </div>
                 """, unsafe_allow_html=True)
             with d_col3:
-                suspicious_words = ", ".join(results['url_features']['suspicious_words']) if results['url_features']['suspicious_words'] else "None"
+                susp = len(results['url_features']['suspicious_words'])
                 st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">Suspicious Keywords</div>
-                    <div class="metric-value" style="font-size: 16px;">{suspicious_words}</div>
+                    <div class="metric-value">{susp} Found</div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+            st.write("") # Spacer
+            
+            # Row 2: Premium Extracted Data (SSL Issuer, Final URL, Title)
+            p_col1, p_col2 = st.columns(2)
+            with p_col1:
+                final_url = results['url_features']['final_url']
+                is_redirected = results['url_features']['original_url'] != final_url
+                redir_text = f"🔀 Redirected to: {final_url[:30]}..." if is_redirected else "✅ Direct Link"
+                
+                st.markdown(f"""
+                <div class="metric-box" style="text-align: left; border-left-color: {'#FF0000' if is_redirected else '#00e5ff'};">
+                    <div class="metric-title">Redirect Unmasking</div>
+                    <div style="color: #fff; font-size: 14px; margin-top: 5px;">{redir_text}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with p_col2:
+                issuer = results['ssl_details'].get('issuer', 'Unknown')
+                st.markdown(f"""
+                <div class="metric-box" style="text-align: left;">
+                    <div class="metric-title">SSL Certificate Issuer</div>
+                    <div style="color: #fff; font-size: 14px; margin-top: 5px;">{issuer}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            st.write("")
+            st.markdown(f"""
+            <div class="metric-box" style="text-align: left; padding: 15px;">
+                <div class="metric-title">Scraped DOM Target Title</div>
+                <div style="color: #fff; font-size: 15px; margin-top: 5px; font-weight: bold;">{results['dom_context']['page_title']}</div>
+            </div>
+            """, unsafe_allow_html=True)

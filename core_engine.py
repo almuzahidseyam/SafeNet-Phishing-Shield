@@ -6,6 +6,9 @@ import datetime
 import google.generativeai as genai
 import json
 import os
+import socket
+import ssl
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,25 +18,59 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-def extract_url_features(url):
-    """Extracts deterministic features from a URL."""
+def unmask_url(url):
+    """Premium Feature: Chases redirects to unmask shorteners (e.g., bit.ly)."""
     if not url.startswith("http"):
         url = "http://" + url
-        
-    parsed_url = urlparse(url)
-    ext = tldextract.extract(url)
+    try:
+        response = requests.head(url, allow_redirects=True, timeout=5)
+        return response.url
+    except:
+        return url
+
+def get_ssl_details(hostname):
+    """Premium Feature: Deep SSL Certificate Inspection."""
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((hostname, 443), timeout=3) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert()
+                issuer = dict(x[0] for x in cert.get('issuer', []))
+                return {"issuer": issuer.get('organizationName', issuer.get('commonName', 'Unknown')), "valid": True}
+    except Exception as e:
+        return {"issuer": "Invalid/No SSL", "valid": False}
+
+def scrape_page_context(url):
+    """Premium Feature: Scrapes DOM to see what the page is actually claiming to be."""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.get(url, headers=headers, timeout=4)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        title = soup.title.string if soup.title else "No Title"
+        meta = soup.find('meta', attrs={'name': 'description'})
+        desc = meta['content'] if meta else "No Description"
+        return {"page_title": title.strip()[:100], "meta_description": desc.strip()[:150]}
+    except:
+        return {"page_title": "Offline or Blocked (403)", "meta_description": "N/A"}
+
+def extract_url_features(original_url):
+    """Extracts deterministic features from a URL."""
+    final_url = unmask_url(original_url)
+    parsed_url = urlparse(final_url)
+    ext = tldextract.extract(final_url)
     
     domain = ext.domain + "." + ext.suffix
     
     features = {
-        "url": url,
+        "original_url": original_url,
+        "final_url": final_url,
         "domain": domain,
         "subdomain": ext.subdomain,
         "is_https": parsed_url.scheme == "https",
-        "url_length": len(url),
+        "url_length": len(final_url),
         "has_ip_in_domain": any(char.isdigit() for char in domain.replace(".", "")),
         "hyphens_in_domain": domain.count("-"),
-        "suspicious_words": check_suspicious_words(url)
+        "suspicious_words": check_suspicious_words(final_url)
     }
     return features
 
@@ -59,23 +96,25 @@ def get_whois_data(domain):
     except Exception as e:
         return {"domain_age_days": "Unknown", "registrar": "Unknown", "error": str(e)}
 
-def analyze_with_ai(url_features, whois_features):
+def analyze_with_ai(url_features, whois_features, ssl_details, dom_context):
     """Uses Gemini API to act as a Cyber Analyst and score the risk."""
     if not GEMINI_API_KEY:
         return {"score": 50, "verdict": "⚠️ AI Offline", "reasoning": "Gemini API Key missing in .env file."}
     
     prompt = f"""
     You are an elite Cybersecurity Threat Intelligence Analyst. 
-    Analyze the following URL features and WHOIS data to determine if this link is a phishing scam, especially targeting Bangladeshi users (e.g., fake bKash, Daraz, Gov jobs).
+    Analyze the following URL features, WHOIS data, SSL Cert, and Page Title to determine if this link is a phishing scam, especially targeting Bangladeshi users (e.g., fake bKash, Daraz, Gov jobs).
     
-    URL Features: {json.dumps(url_features)}
+    URL Features (Redirect Chased): {json.dumps(url_features)}
     WHOIS Data: {json.dumps(whois_features)}
+    SSL Details: {json.dumps(ssl_details)}
+    Scraped DOM Context (What the page claims to be): {json.dumps(dom_context)}
     
     Provide your analysis in JSON format exactly like this:
     {{
         "risk_score": <int 0-100 where 100 is definitely phishing>,
         "verdict": "<Safe | Suspicious | High Risk Phishing>",
-        "reasoning_bengali": "<Explain in clear, professional Bengali why this is safe or a scam. Mention domain age, lack of HTTPS, typosquatting, etc.>"
+        "reasoning_bengali": "<Explain in clear, professional Bengali why this is safe or a scam. Mention redirect masking, domain age, lack of SSL, mismatch between URL and Page Title, etc.>"
     }}
     Do NOT include markdown formatting like ```json, just output the raw JSON object.
     """
@@ -93,10 +132,15 @@ def full_scan(url):
     """Runs the complete phishing analysis pipeline."""
     url_features = extract_url_features(url)
     whois_features = get_whois_data(url_features["domain"])
-    ai_analysis = analyze_with_ai(url_features, whois_features)
+    ssl_details = get_ssl_details(url_features["domain"])
+    dom_context = scrape_page_context(url_features["final_url"])
+    
+    ai_analysis = analyze_with_ai(url_features, whois_features, ssl_details, dom_context)
     
     return {
         "url_features": url_features,
         "whois_features": whois_features,
+        "ssl_details": ssl_details,
+        "dom_context": dom_context,
         "ai_analysis": ai_analysis
     }

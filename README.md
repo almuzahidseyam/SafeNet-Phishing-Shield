@@ -7,10 +7,12 @@
 
 > A next-generation, AI-powered Cyber Security tool designed specifically to protect Bangladeshi users from sophisticated phishing attacks (Fake bKash offers, Daraz clones, Govt Job scams).
 
-## ✨ Premium Features
+## ✨ Premium Enterprise Features
+- **Redirect Unmasking:** Chases shorteners (e.g., bit.ly) or sneaky redirects to find the actual destination URL before scanning.
+- **Deep SSL Inspection:** Goes beyond simple `https://` checking. Actually connects via socket to extract the exact SSL Certificate Issuer to verify authenticity.
+- **DOM Content Scraping:** Fetches the actual HTML title and meta descriptions of the target site so the AI can verify if a site claiming to be "bKash" actually has bKash context.
 - **Deterministic WHOIS Scanning:** Automatically resolves Domain Registration Age and Registrar info to catch freshly registered scam domains.
-- **URL Syntax Profiling:** Analyzes URL length, typo-squatting, hyphen injections, and hardcoded IPs.
-- **Gemini AI Threat Analyst:** Combines the hard metrics (WHOIS, SSL) and feeds them into a strict AI prompt to evaluate the semantic intent of the URL.
+- **Gemini AI Threat Analyst:** Combines the hard metrics (WHOIS, SSL, DOM) and feeds them into a strict AI prompt to evaluate the semantic intent of the URL.
 - **Cyber-Themed Dashboard:** Dark-mode Streamlit UI with Plotly interactive Gauge Charts indicating Risk Level (0-100%).
 
 ## 🏗️ Architecture
