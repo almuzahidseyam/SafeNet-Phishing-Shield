@@ -22,7 +22,7 @@ if GEMINI_API_KEY:
 
 def unmask_url(url):
     """Premium Feature: Chases redirects to unmask shorteners (e.g., bit.ly)."""
-    if not url.startswith("http"):
+    if not url.startswith(("http://", "https://")):
         url = "http://" + url
     try:
         response = requests.head(url, allow_redirects=True, timeout=5)
@@ -62,8 +62,17 @@ def scrape_page_context(url):
 def extract_url_features(original_url):
     """Extracts deterministic features from a URL."""
     final_url = unmask_url(original_url)
+    
+    # Bug Fix: Ensure proper URL protocol handling (e.g. ftp:// won't break it)
+    if not final_url.startswith(("http://", "https://")):
+        final_url = "http://" + final_url
+        
     parsed_url = urlparse(final_url)
-    ext = tldextract.extract(final_url)
+    
+    # Premium Deployment Fix: Serverless/Cloud PermissionError prevention
+    # By default, tldextract attempts to write a cache file to the OS. On read-only clouds (Streamlit/Docker), this crashes.
+    extractor = tldextract.TLDExtract(cache_dir=False)
+    ext = extractor(final_url)
     
     domain = ext.domain + "." + ext.suffix
     
