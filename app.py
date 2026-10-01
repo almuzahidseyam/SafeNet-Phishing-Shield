@@ -59,6 +59,10 @@ if scan_btn and url_input:
             
         st.markdown("---")
         
+        # Premium DNS Fast-Fail Alert
+        if not results['url_features'].get('dns_resolves', True):
+            st.error("🚨 CRITICAL ALERT: The domain does not resolve to an IP address (DNS failure). This is either a dead link or a recently taken-down scam site.")
+            
         # --- UI Layout ---
         res_col1, res_col2 = st.columns([1, 2])
         

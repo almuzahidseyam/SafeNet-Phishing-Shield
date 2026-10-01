@@ -59,6 +59,15 @@ def scrape_page_context(url):
     except:
         return {"page_title": "Offline or Blocked (403)", "meta_description": "N/A"}
 
+def check_dns_resolution(hostname):
+    """Premium Optimization: Fail-fast DNS lookup to verify domain existence."""
+    try:
+        socket.setdefaulttimeout(3)
+        socket.gethostbyname(hostname)
+        return True
+    except:
+        return False
+
 def extract_url_features(original_url):
     """Extracts deterministic features from a URL."""
     final_url = unmask_url(original_url)
@@ -68,9 +77,9 @@ def extract_url_features(original_url):
         final_url = "http://" + final_url
         
     parsed_url = urlparse(final_url)
+    hostname = parsed_url.hostname if parsed_url.hostname else ""
     
     # Premium Deployment Fix: Serverless/Cloud PermissionError prevention
-    # By default, tldextract attempts to write a cache file to the OS. On read-only clouds (Streamlit/Docker), this crashes.
     extractor = tldextract.TLDExtract(cache_dir=False)
     ext = extractor(final_url)
     
@@ -81,17 +90,22 @@ def extract_url_features(original_url):
         is_punycode = domain.encode('idna').decode('utf-8').startswith("xn--")
     except:
         is_punycode = False
+        
+    # DNS Resolution Check
+    dns_resolves = check_dns_resolution(hostname) if hostname else False
     
     features = {
         "original_url": original_url,
         "final_url": final_url,
         "domain": domain,
+        "hostname": hostname,
         "subdomain": ext.subdomain,
         "is_https": parsed_url.scheme == "https",
         "url_length": len(final_url),
         "has_ip_in_domain": any(char.isdigit() for char in domain.replace(".", "")),
         "hyphens_in_domain": domain.count("-"),
         "is_punycode_homograph": is_punycode,
+        "dns_resolves": dns_resolves,
         "suspicious_words": check_suspicious_words(final_url)
     }
     return features
