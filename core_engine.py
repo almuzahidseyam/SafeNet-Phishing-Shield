@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import ssl
+import re
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -43,8 +44,13 @@ def get_ssl_details(hostname):
 def scrape_page_context(url):
     """Premium Feature: Scrapes DOM to see what the page is actually claiming to be."""
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        res = requests.get(url, headers=headers, timeout=4)
+        # Premium Security Fix: Bypassing anti-bot protections (Cloudflare/WAF) used by phishing sites
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+        res = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(res.text, 'html.parser')
         title = soup.title.string if soup.title else "No Title"
         meta = soup.find('meta', attrs={'name': 'description'})
@@ -122,11 +128,18 @@ def analyze_with_ai(url_features, whois_features, ssl_details, dom_context):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
-        text = response.text.replace('```json', '').replace('```', '').strip()
-        analysis = json.loads(text)
+        text = response.text
+        
+        # Premium Bug Fix: Strict Regex Parsing to prevent JSONDecodeError if LLM hallucinates
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            analysis = json.loads(match.group(0))
+        else:
+            analysis = json.loads(text.replace('```json', '').replace('```', '').strip())
+            
         return analysis
     except Exception as e:
-        return {"risk_score": 0, "verdict": "Error", "reasoning_bengali": f"AI Engine Error: {str(e)}"}
+        return {"risk_score": 0, "verdict": "Error", "reasoning_bengali": f"AI Parsing Error: {str(e)}"}
 
 def full_scan(url):
     """Runs the complete phishing analysis pipeline."""
