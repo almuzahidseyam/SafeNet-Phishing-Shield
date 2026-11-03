@@ -1,54 +1,90 @@
-# 🛡️ SafeNet BD: AI Phishing Shield
+# SafeNet · Link inspection
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
-![Gemini AI](https://img.shields.io/badge/Gemini-AI%20Analyst-orange)
-![CyberSecurity](https://img.shields.io/badge/Security-Anti--Phishing-red)
-![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B)
+A local research assistant for inspecting public links: URL features, redirects,
+TLS certificate evidence, page title/description and registry age. Optional Gemini
+analysis explains the evidence in Bengali. It is not a phishing detector with a
+validated accuracy rate, and no result certifies that a website is safe.
 
-> A next-generation, AI-powered Cyber Security tool designed specifically to protect Bangladeshi users from sophisticated phishing attacks (Fake bKash offers, Daraz clones, Govt Job scams).
+## Run locally
 
-## ✨ Premium Enterprise Features
-- **Homograph Attack Detection (Punycode):** Catches extremely sophisticated visual spoofing where scammers use Cyrillic or Greek letters that look identical to English (e.g., bкash vs bkash).
-- **Redirect Unmasking:** Chases shorteners (e.g., bit.ly) or sneaky redirects to find the actual destination URL before scanning.
-- **Deep SSL Inspection:** Goes beyond simple `https://` checking. Actually connects via socket to extract the exact SSL Certificate Issuer to verify authenticity.
-- **DOM Content Scraping:** Fetches the actual HTML title and meta descriptions of the target site so the AI can verify if a site claiming to be "bKash" actually has bKash context.
-- **Deterministic WHOIS Scanning:** Automatically resolves Domain Registration Age and Registrar info to catch freshly registered scam domains with explicit timeout thread-protection.
-- **Gemini AI Threat Analyst:** Combines the hard metrics (WHOIS, SSL, DOM, Homograph) and feeds them into a strict AI prompt to evaluate the semantic intent of the URL.
-- **Cyber-Themed Dashboard:** Dark-mode Streamlit UI with Plotly interactive Gauge Charts indicating Risk Level (0-100%).
+Use Python 3.12 or 3.13 in a virtual environment:
 
-## 🏗️ Architecture
-
-```mermaid
-flowchart LR
-    A[User Inputs URL] --> B{URL Parser}
-    B --> C[Extract Subdomain/Keywords]
-    B --> D[WHOIS Registry Lookup]
-    C --> E[JSON Feature Map]
-    D --> E
-    E --> F[Gemini 1.5 Flash AI]
-    F --> G[Generate Risk Score & Bengali Report]
-    G --> H[Streamlit UI & Gauge Chart]
+```sh
+python -m venv .venv
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt -c constraints.txt
+python -m streamlit run app.py --server.address=127.0.0.1
 ```
 
-## 🚀 Setup & Execution
+The basic inspection does not require an API key. For optional AI interpretation,
+copy `.env.example` to `.env`, set `GEMINI_API_KEY` and an available `GEMINI_MODEL`
+ID from your Google AI Studio account. Model availability changes; the application
+does not silently fall back to an obsolete model. See the
+[Gemini generateContent API](https://ai.google.dev/api/generate-content).
 
-### 1. Requirements
-Ensure you have a [Google Gemini API Key](https://aistudio.google.com/).
-Create a `.env` file in the root directory:
-```env
-GEMINI_API_KEY=your_api_key_here
+The AI checkbox is off by default. Enabling it sends extracted domain/URL features,
+registry metadata and page title/description to Google, and may incur API charges.
+Full URL query strings and page bodies are not included in the AI payload. The
+scanner still contacts the requested public website and the RDAP registry service
+when you inspect a link. Do not submit private or credential-bearing links.
+
+## What the results mean
+
+- **Unavailable** is a distinct state with `risk_score: null`. Missing keys,
+  timeouts, provider errors and malformed model responses never become zero risk.
+- A valid AI score of zero means few detected indicators, not a safe certificate.
+  Scores are model-generated heuristics, not calibrated phishing probabilities.
+- TLS verification means the certificate matches the connected hostname. Scam
+  sites can have valid certificates too.
+- Internationalized/punycode names, common words and IP-address URLs are evidence
+  to review, not proof of an attack. Digits inside a domain do not make it an IP.
+- A failed DNS/HTTP/registry lookup does not establish that a site is malicious.
+
+## Network boundary
+
+Only HTTP(S), public IP addresses and standard ports are accepted. Credentials,
+control characters, local/private/reserved/multicast addresses, mixed public and
+private DNS answers, and IPv6 transition addresses are rejected. Every redirect
+is revalidated. The connection uses the checked numeric IP directly while TLS
+checks the original hostname; DNS is not looked up again during connection.
+
+The transport follows at most five redirects, accepts at most 256 KiB of response
+body, rejects compressed bodies, and does not use ambient HTTP proxies. Optional
+AI credentials are sent only to Google's fixed API host; API redirects are rejected.
+
+All network operations run in disposable subprocesses. A page inspection gets
+eight seconds, registry lookup four seconds, and optional AI analysis twenty
+seconds. Timeout kills and waits for the worker, including a worker blocked in
+DNS or slow response headers. Process startup has platform-dependent overhead.
+There is no background WHOIS thread left running after a timeout; registry data
+now uses HTTPS RDAP through the same checked transport. Unavailable registry
+data remains unknown. The public suffix list is loaded from the installed package
+without making a hidden download during scans.
+
+Keep this owner-operated application on loopback. Before shared/public hosting,
+add authentication, per-user quotas, outbound firewall rules and operational
+monitoring. Network checks are defense in depth, not a public-service deployment
+guarantee. The app's current-session result is stored in Streamlit session memory;
+there is no application results database or analytics.
+
+## Verify
+
+```sh
+python -m pip install -r requirements-dev.txt -c constraints.txt
+python -m pytest -q
+python -m pip_audit -r constraints.txt --no-deps --disable-pip
 ```
 
-### 2. Installation
-```bash
-git clone https://github.com/almuzahidseyam/SafeNet-Phishing-Shield.git
-cd SafeNet-Phishing-Shield
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+Tests exercise private destinations, redirect revalidation, DNS pinning, body
+limits, API errors, response schema validation, a real timed-out subprocess, and
+the rendered Streamlit unavailable states. Tests use fixtures; they do not call
+Gemini or probe third-party private networks. CI repeats the suite on Windows and
+Linux. Update constraints deliberately and rerun tests and the dependency audit.
 
-### 3. Run the Shield
-```bash
-streamlit run app.py
-```
+Implementation: `safe_http.py` owns the network policy, `network_worker.py` owns
+remote calls, `core_engine.py` owns result validation, and `app.py` renders escaped
+text with native Streamlit components.
+
+References: [Python subprocess timeout behavior](https://docs.python.org/3/library/subprocess.html#subprocess.run),
+[TLS hostname verification](https://docs.python.org/3/library/http.client.html#http.client.HTTPSConnection).

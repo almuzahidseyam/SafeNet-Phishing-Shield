@@ -4,3 +4,6 @@ __pycache__/
 venv/
 .env
 .streamlit/
+.venv/
+.pytest_cache/
+test-results/
